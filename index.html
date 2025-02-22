@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Indoor Air Quality Data</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        background-color: #f4f4f4;
+        margin: 20px;
+      }
+      #pmChart,
+      #noiseChart {
+        width: 100%;
+        height: 750px;
+        margin-bottom: 50px;
+      }
+      .latest-entry {
+        margin-top: 10px;
+        font-size: 16px;
+        color: #333;
+      }
+      .offline {
+        color: red;
+        font-weight: bold;
+      }
+      footer {
+        text-align: center;
+        margin-top: 30px;
+        font-size: 14px;
+        color: #777;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Indoor Nodes - Air Quality Data</h1>
+    <div id="pmChart"></div>
+    <div id="noiseChart"></div>
+    <div id="latestEntries"></div>
+
+    <script>
+      async function fetchData(channelID, apiKey) {
+        try {
+          const url = `https://api.thingspeak.com/channels/${channelID}/feeds.json?api_key=${apiKey}&results=8000`;
+          const response = await fetch(url);
+          if (!response.ok)
+            throw new Error(`HTTP error! Status: ${response.status}`);
+          const data = await response.json();
+          return data.feeds || [];
+        } catch (error) {
+          console.error("Error fetching data for channel:", channelID, error);
+          return [];
+        }
+      }
+
+      async function plotData() {
+        const channels = [
+          { id: 2657305, apiKey: "Z8JPQP9Z110MJJCA", label: "Indoor 1" },
+          { id: 2657592, apiKey: "8C8CH9B2JUNZWYU6", label: "Indoor 2" },
+          { id: 2657616, apiKey: "CXI1Z1HP0VVDKIG7", label: "Indoor 3" },
+          { id: 2657617, apiKey: "88KR7A5K4ASO4RE5", label: "Indoor 4" },
+          { id: 2338305, apiKey: "GF3Y0YJ9J53ELXIF", label: "Ihub Car " },
+        ];
+
+        const pmTraces = [];
+        const noiseTraces = [];
+        const colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd"];
+        const startDate = new Date("2025-02-22T18:00:00");
+
+        for (let i = 0; i < channels.length; i++) {
+          const channel = channels[i];
+          const feeds = await fetchData(channel.id, channel.apiKey);
+
+          if (feeds.length > 0) {
+            const latestFeed = feeds[feeds.length - 1];
+            const latestTime = new Date(latestFeed.created_at).toLocaleString(
+              "en-IN",
+              { timeZone: "Asia/Kolkata" }
+            );
+            const offline =
+              new Date() - new Date(latestFeed.created_at) > 1800000
+                ? " <span class='offline'>(OFFLINE)</span>"
+                : "";
+            document.getElementById(
+              "latestEntries"
+            ).innerHTML += `<div class='latest-entry'><strong>${channel.label}:</strong> PM2.5 - ${latestFeed.field4} µg/m³ | PM10 - ${latestFeed.field3} µg/m³ | Noise - ${latestFeed.field6} dB | Time - ${latestTime} ${offline}</div>`;
+          }
+
+          const filteredFeeds = feeds.filter(
+            (feed) => new Date(feed.created_at) >= startDate
+          );
+          const timestamps = filteredFeeds.map(
+            (feed) => new Date(feed.created_at)
+          );
+          const pm25 = filteredFeeds.map((feed) => parseFloat(feed.field4));
+          const pm10 = filteredFeeds.map((feed) => parseFloat(feed.field3));
+          const noise = filteredFeeds.map((feed) => parseFloat(feed.field6));
+
+          pmTraces.push({
+            x: timestamps,
+            y: pm25,
+            mode: "lines+markers",
+            name: `${channel.label} PM2.5`,
+            line: { color: colors[i] },
+          });
+          pmTraces.push({
+            x: timestamps,
+            y: pm10,
+            mode: "lines+markers",
+            name: `${channel.label} PM10`,
+            line: { color: colors[i] },
+          });
+          noiseTraces.push({
+            x: timestamps,
+            y: noise,
+            mode: "lines+markers",
+            name: `${channel.label} Noise`,
+            line: { color: colors[i] },
+          });
+        }
+
+        Plotly.newPlot("pmChart", pmTraces, {
+          title: "PM2.5 and PM10 Levels Over Time",
+          xaxis: {
+            title: "Timestamp",
+            type: "date",
+            rangeslider: { visible: true },
+          },
+          yaxis: { title: "Concentration (µg/m³)", rangemode: "tozero" },
+        });
+
+        Plotly.newPlot("noiseChart", noiseTraces, {
+          title: "Noise Levels Over Time",
+          xaxis: {
+            title: "Timestamp",
+            type: "date",
+            rangeslider: { visible: true },
+          },
+          yaxis: { title: "Noise Level (dB)", rangemode: "tozero" },
+        });
+      }
+
+      plotData();
+    </script>
+
+    <footer>
+      Created by <strong>Asritha Arroju</strong>, SPCRC Lab, @IIIT Hyderabad
+    </footer>
+  </body>
+</html>
