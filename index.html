@@ -55,19 +55,121 @@
         }
       }
 
+      // Function to calculate the average of data points within a given time window
+      function averageData(data, timeWindow) {
+        const averagedData = [];
+        for (let i = 0; i < data.length; i += timeWindow) {
+          const slice = data.slice(i, i + timeWindow);
+          if (slice.length > 0) {
+            let sumPM25 = 0;
+            let sumPM10 = 0;
+            let sumNoise = 0;
+            let countPM25 = 0;
+            let countPM10 = 0;
+            let countNoise = 0;
+            let timestamp = new Date(slice[0].created_at); // Use the timestamp of the first data point in the window
+
+            slice.forEach((item) => {
+              if (item.pm25Value !== null) {
+                sumPM25 += item.pm25Value;
+                countPM25++;
+              }
+              if (item.pm10Value !== null) {
+                sumPM10 += item.pm10Value;
+                countPM10++;
+              }
+              if (item.noiseValue !== null) {
+                sumNoise += item.noiseValue;
+                countNoise++;
+              }
+            });
+
+            const avgPM25 = countPM25 > 0 ? sumPM25 / countPM25 : null;
+            const avgPM10 = countPM10 > 0 ? sumPM10 / countPM10 : null;
+            const avgNoise = countNoise > 0 ? sumNoise / countNoise : null;
+
+            averagedData.push({
+              timestamp: timestamp,
+              pm25Value: avgPM25,
+              pm10Value: avgPM10,
+              noiseValue: avgNoise,
+            });
+          }
+        }
+        return averagedData;
+      }
+
       async function plotData() {
         const channels = [
-          { id: 2657305, apiKey: "Z8JPQP9Z110MJJCA", label: "Indoor 1" },
-          { id: 2657592, apiKey: "8C8CH9B2JUNZWYU6", label: "Indoor 2" },
-          { id: 2657616, apiKey: "CXI1Z1HP0VVDKIG7", label: "Indoor 3" },
-          { id: 2657617, apiKey: "88KR7A5K4ASO4RE5", label: "Indoor 4" },
-          { id: 2338305, apiKey: "GF3Y0YJ9J53ELXIF", label: "Ihub Car " },
+          {
+            id: 2657305,
+            apiKey: "Z8JPQP9Z110MJJCA",
+            label: "Indoor 1",
+            pm25: "field3",
+            pm10: "field4",
+            noise: "field6",
+          },
+          {
+            id: 2657592,
+            apiKey: "8C8CH9B2JUNZWYU6",
+            label: "Indoor 2",
+            pm25: "field3",
+            pm10: "field4",
+            noise: "field6",
+          },
+          {
+            id: 2657616,
+            apiKey: "CXI1Z1HP0VVDKIG7",
+            label: "Indoor 3",
+            pm25: "field3",
+            pm10: "field4",
+            noise: "field6",
+          },
+          {
+            id: 2657617,
+            apiKey: "88KR7A5K4ASO4RE5",
+            label: "Indoor 4",
+            pm25: "field3",
+            pm10: "field4",
+            noise: "field6",
+          },
+          {
+            id: 2338305,
+            apiKey: "GF3Y0YJ9J53ELXIF",
+            label: "Ihub Car",
+            noise: "field1",
+          },
+          {
+            id: 2851310,
+            apiKey: "C99PGC70XW6QF70W",
+            label: "Indoor 5",
+            pm25: "field2",
+            pm10: "field3",
+            noise: "field6",
+          },
+          {
+            id: 2851367,
+            apiKey: "NZMR6Q0SST1KF394",
+            label: "Indoor 6",
+            pm25: "field2",
+            pm10: "field3",
+            noise: "field6",
+          },
         ];
 
         const pmTraces = [];
         const noiseTraces = [];
-        const colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd"];
-        const startDate = new Date("2025-02-22T18:00:00");
+        const colors = [
+          "#1f77b4",
+          "#ff7f0e",
+          "#2ca02c",
+          "#d62728",
+          "#9467bd",
+          "#8c564b",
+          "#e377c2",
+        ];
+        const startDate = new Date("2025-02-23T10:00:00");
+        const averagingWindow = 3; // Average over 3 minutes
 
         for (let i = 0; i < channels.length; i++) {
           const channel = channels[i];
@@ -83,42 +185,83 @@
               new Date() - new Date(latestFeed.created_at) > 1800000
                 ? " <span class='offline'>(OFFLINE)</span>"
                 : "";
+
+            let pm25Value = channel.pm25 ? latestFeed[channel.pm25] : "N/A";
+            let pm10Value = channel.pm10 ? latestFeed[channel.pm10] : "N/A";
+            let noiseValue = channel.noise ? latestFeed[channel.noise] : "N/A";
+
+            // Conditionally include PM values in the latest entry
+            let pmInfo = "";
+            if (pm25Value !== "N/A" && pm10Value !== "N/A") {
+              pmInfo = `PM2.5 - ${pm25Value} µg/m³ | PM10 - ${pm10Value} µg/m³ | `;
+            } else if (pm25Value !== "N/A") {
+              pmInfo = `PM2.5 - ${pm25Value} µg/m³ | `;
+            } else if (pm10Value !== "N/A") {
+              pmInfo = `PM10 - ${pm10Value} µg/m³ | `;
+            }
+
             document.getElementById(
               "latestEntries"
-            ).innerHTML += `<div class='latest-entry'><strong>${channel.label}:</strong> PM2.5 - ${latestFeed.field4} µg/m³ | PM10 - ${latestFeed.field3} µg/m³ | Noise - ${latestFeed.field6} dB | Time - ${latestTime} ${offline}</div>`;
+            ).innerHTML += `<div class='latest-entry'><strong>${channel.label}:</strong> ${pmInfo}Noise - ${noiseValue} dB | Time - ${latestTime} ${offline}</div>`;
           }
 
-          const filteredFeeds = feeds.filter(
+          let filteredFeeds = feeds.filter(
             (feed) => new Date(feed.created_at) >= startDate
           );
-          const timestamps = filteredFeeds.map(
-            (feed) => new Date(feed.created_at)
-          );
-          const pm25 = filteredFeeds.map((feed) => parseFloat(feed.field4));
-          const pm10 = filteredFeeds.map((feed) => parseFloat(feed.field3));
-          const noise = filteredFeeds.map((feed) => parseFloat(feed.field6));
 
-          pmTraces.push({
-            x: timestamps,
-            y: pm25,
-            mode: "lines+markers",
-            name: `${channel.label} PM2.5`,
-            line: { color: colors[i] },
+          // Prepare data for averaging
+          const preparedData = filteredFeeds.map((feed) => {
+            return {
+              created_at: feed.created_at,
+              pm25Value: channel.pm25 ? parseFloat(feed[channel.pm25]) : null,
+              pm10Value: channel.pm10 ? parseFloat(feed[channel.pm10]) : null,
+              noiseValue: channel.noise
+                ? parseFloat(feed[channel.noise])
+                : null,
+            };
           });
-          pmTraces.push({
-            x: timestamps,
-            y: pm10,
-            mode: "lines+markers",
-            name: `${channel.label} PM10`,
-            line: { color: colors[i] },
-          });
-          noiseTraces.push({
-            x: timestamps,
-            y: noise,
-            mode: "lines+markers",
-            name: `${channel.label} Noise`,
-            line: { color: colors[i] },
-          });
+
+          // Apply averaging
+          const averagedData = averageData(preparedData, averagingWindow);
+
+          const timestamps = averagedData.map((item) => item.timestamp);
+
+          if (channel.pm25 && channel.pm10) {
+            const pm25 = averagedData
+              .map((item) => item.pm25Value)
+              .filter((value) => value !== null);
+            const pm10 = averagedData
+              .map((item) => item.pm10Value)
+              .filter((value) => value !== null);
+
+            pmTraces.push({
+              x: timestamps,
+              y: pm25,
+              mode: "lines",
+              name: `${channel.label} PM2.5`,
+              line: { color: colors[i] },
+            });
+            pmTraces.push({
+              x: timestamps,
+              y: pm10,
+              mode: "lines",
+              name: `${channel.label} PM10`,
+              line: { color: colors[i] },
+            });
+          }
+
+          if (channel.noise) {
+            const noise = averagedData
+              .map((item) => item.noiseValue)
+              .filter((value) => value !== null);
+            noiseTraces.push({
+              x: timestamps,
+              y: noise,
+              mode: "lines",
+              name: `${channel.label} Noise`,
+              line: { color: colors[i] },
+            });
+          }
         }
 
         Plotly.newPlot("pmChart", pmTraces, {
@@ -128,7 +271,11 @@
             type: "date",
             rangeslider: { visible: true },
           },
-          yaxis: { title: "Concentration (µg/m³)", rangemode: "tozero" },
+          yaxis: {
+            title: "Concentration (µg/m³)",
+            rangemode: "tozero",
+            range: [0, 500],
+          },
         });
 
         Plotly.newPlot("noiseChart", noiseTraces, {
@@ -138,7 +285,11 @@
             type: "date",
             rangeslider: { visible: true },
           },
-          yaxis: { title: "Noise Level (dB)", rangemode: "tozero" },
+          yaxis: {
+            title: "Noise Level (dB)",
+            rangemode: "tozero",
+            range: [30, 130],
+          },
         });
       }
 
